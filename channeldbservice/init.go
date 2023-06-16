@@ -14,6 +14,7 @@ import (
 	"github.com/lightningnetwork/lnd"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/kvdb"
+	bolt "go.etcd.io/bbolt"
 )
 
 const (
@@ -35,9 +36,45 @@ func Get(workingDir string) (db *channeldb.DB, cleanupFn func() error, err error
 		},
 	)
 	if err != nil {
-		return nil, nil, err
+		logger.Errorf("error getting service finished with error: %v", err)
+		dbName := "channel.db"
+		channeldb, err := bolt.Open(path.Join(workingDir, dbName), 0600, nil)
+		if err != nil {
+			logger.Errorf("opening database received error: %v", err)
+		}
+		logger.Infof("ChannelDB was successfully opened")
+		logger.Infof("attempting to delete entry from database")
+		err = removeKeyIfExists(channeldb)
+		if err != nil {
+			return nil, nil, err
+		}
+		logger.Infof("removeKeyIfExists retured with %v", err)
+		logger.Infof("Now that we have successfully deleted the entry from database we attempt create the service again.")
+		service, release, err = serviceRefCounter.Get(
+			func() (interface{}, refcount.ReleaseFunc, error) {
+				return newService(workingDir)
+			},
+		)
+		logger.Infof("serviceRefCounter.Get received %v, and finshed with err: ", service, err)
 	}
 	return service.(*channeldb.DB), release, err
+}
+
+func removeKeyIfExists(db *bolt.DB) error {
+	defer db.Close()
+	return db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("graph-edge"))
+		if b == nil {
+			logger.Info("bucket graph-edge does not exist")
+			return nil
+		}
+		v := b.Get([]byte("02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325"))
+		if v == nil {
+			logger.Infof("value 02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325 does not exist in bucket %v", b)
+			return nil
+		}
+		return b.Delete([]byte("02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325"))
+	})
 }
 
 func newService(workingDir string) (db *channeldb.DB, rel refcount.ReleaseFunc, err error) {

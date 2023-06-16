@@ -29,7 +29,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/lnrpc"
-	bolt "go.etcd.io/bbolt"
 )
 
 const (
@@ -158,17 +157,6 @@ func Init(tempDir string, workingDir string, services AppServices) (err error) {
 				startBeforeSync = false
 				appLogger.Log(fmt.Sprintf("Removed file: %v result: %v", forceBootstrap, err), "INFO")
 			}
-
-			dbName := "channel.db"
-			channeldb, err := bolt.Open(path.Join(workingDir, dbName), 0600, nil)
-			if err != nil {
-				appLogger.Log(fmt.Sprintf("opening database received error: %v", err), "ERROR")
-			}
-			appLogger.Log("ChannelDB was successfully opened", "INFO")
-			defer channeldb.Close()
-			appLogger.Log("attempting to delete entry from database", "INFO")
-			err = removeKeyIfExists(channeldb)
-			appLogger.Log(fmt.Sprintf("removeKeyIfExists retured with %v", err), "ERROR")
 		}
 
 		// drop last sweeper tx
@@ -192,22 +180,6 @@ func Init(tempDir string, workingDir string, services AppServices) (err error) {
 		appLogger.Log("Breez initialization finished", "INFO")
 	}
 	return err
-}
-
-func removeKeyIfExists(db *bolt.DB) error {
-	return db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("graph-edge"))
-		if b == nil {
-			appLogger.Log("bucket graph-edge does not exist", "INFO")
-			return nil
-		}
-		v := b.Get([]byte("02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325"))
-		if v == nil {
-			appLogger.Log(fmt.Sprintf("value 02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325 does not exist in bucket %v", b), "INFO")
-			return nil
-		}
-		return b.Delete([]byte("02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325"))
-	})
 }
 
 // SetBackupProvider sets a new backup provider backend.
