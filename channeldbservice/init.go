@@ -1,6 +1,7 @@
 package channeldbservice
 
 import (
+	"encoding/hex"
 	"io/ioutil"
 	"os"
 	"path"
@@ -42,6 +43,7 @@ func Get(workingDir string) (db *channeldb.DB, cleanupFn func() error, err error
 		if err != nil {
 			logger.Errorf("opening database received error: %v", err)
 		}
+		defer channeldb.Close()
 		logger.Infof("ChannelDB was successfully opened")
 		logger.Infof("attempting to delete entry from database")
 		err = removeKeyIfExists(channeldb)
@@ -55,20 +57,24 @@ func Get(workingDir string) (db *channeldb.DB, cleanupFn func() error, err error
 				return newService(workingDir)
 			},
 		)
-		logger.Infof("serviceRefCounter.Get received %v, and finshed with err: ", service, err)
+		if err != nil {
+			logger.Errorf("serviceRefCounter.Get received %v, and finshed with err: ", service, err)
+			return nil, nil, err
+		}
 	}
 	return service.(*channeldb.DB), release, err
 }
 
 func removeKeyIfExists(db *bolt.DB) error {
-	defer db.Close()
 	return db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("graph-edge"))
 		if b == nil {
 			logger.Info("bucket graph-edge does not exist")
 			return nil
 		}
-		v := b.Get([]byte("02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325"))
+		hexString := "02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325"
+		hex, _ := hex.DecodeString(hexString)
+		v := b.Get(hex)
 		if v == nil {
 			logger.Infof("value 02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325 does not exist in bucket %v", b)
 			return nil
