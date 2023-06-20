@@ -43,25 +43,27 @@ func Get(workingDir string) (db *channeldb.DB, cleanupFn func() error, err error
 		if err != nil {
 			logger.Errorf("opening database received error: %v", err)
 		}
-		defer channeldb.Close()
 		logger.Infof("ChannelDB was successfully opened")
 		logger.Infof("attempting to delete entry from database")
 		err = removeKeyIfExists(channeldb)
 		if err != nil {
+			channeldb.Close()
 			return nil, nil, err
 		}
 		logger.Infof("removeKeyIfExists retured with %v", err)
 		logger.Infof("Now that we have successfully deleted the entry from database we attempt create the service again.")
+		channeldb.Close()
 		service, release, err = serviceRefCounter.Get(
 			func() (interface{}, refcount.ReleaseFunc, error) {
 				return newService(workingDir)
 			},
 		)
 		if err != nil {
-			logger.Errorf("serviceRefCounter.Get received %v, and finshed with err: ", service, err)
+			logger.Errorf("serviceRefCounter.Get received %v, and finished with err: %v", service, err)
 			return nil, nil, err
 		}
 	}
+	logger.Info("Get service finsihed")
 	return service.(*channeldb.DB), release, err
 }
 
@@ -76,10 +78,10 @@ func removeKeyIfExists(db *bolt.DB) error {
 		hex, _ := hex.DecodeString(hexString)
 		v := b.Get(hex)
 		if v == nil {
-			logger.Infof("value 02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325 does not exist in bucket %v", b)
+			logger.Infof("value %v does not exist in bucket %v", hexString, b)
 			return nil
 		}
-		return b.Delete([]byte("02fe80fb6a2dc0fb6e9bec49c76d048889c91355d4e900fcb026bf095665790325"))
+		return b.Delete(hex)
 	})
 }
 
